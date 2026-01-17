@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-add-deleted-at-to-todos
+      author: acme-team
+      changes:
+        - addColumn:
+            tableName: todos
+            columns:
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP
+                  constraints:
+                    nullable: true
+        - createIndex:
+            tableName: todos
+            indexName: idx_todos_deleted_at
+            columns:
+              - column:
+                  name: deleted_at

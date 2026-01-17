@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-create-todos-table.yaml
   - include:
       file: db/changelog/changes/003-insert-sample-data.yaml
+  - include:
+      file: db/changelog/changes/004-add-deleted-at-to-todos.yaml
