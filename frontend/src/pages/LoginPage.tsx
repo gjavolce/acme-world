@@ -60,10 +60,6 @@ export default function LoginPage() {
         <p className="auth-link">
           Don't have an account? <Link to="/register">Register</Link>
         </p>
-        <div className="demo-credentials">
-          <p>Demo credentials:</p>
-          <code>john.doe / password123</code>
-        </div>
       </div>
     </div>
   );

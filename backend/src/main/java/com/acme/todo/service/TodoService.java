@@ -6,6 +6,7 @@ import com.acme.todo.dto.response.TodoResponse;
 import com.acme.todo.entity.Todo;
 import com.acme.todo.entity.Todo.Priority;
 import com.acme.todo.entity.User;
+import com.acme.todo.exception.BadRequestException;
 import com.acme.todo.exception.ResourceNotFoundException;
 import com.acme.todo.repository.TodoRepository;
 import com.acme.todo.repository.UserRepository;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -29,13 +31,13 @@ public class TodoService {
         List<Todo> todos;
 
         if (completed != null && priority != null) {
-            Priority p = Priority.valueOf(priority.toUpperCase());
+            Priority p = parsePriority(priority);
             todos = todoRepository.findByUserIdAndCompletedAndPriorityOrderByCreatedAtDesc(
                     user.getId(), completed, p);
         } else if (completed != null) {
             todos = todoRepository.findByUserIdAndCompletedOrderByCreatedAtDesc(user.getId(), completed);
         } else if (priority != null) {
-            Priority p = Priority.valueOf(priority.toUpperCase());
+            Priority p = parsePriority(priority);
             todos = todoRepository.findByUserIdAndPriorityOrderByCreatedAtDesc(user.getId(), p);
         } else {
             todos = todoRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
@@ -58,13 +60,14 @@ public class TodoService {
     public TodoResponse createTodo(String username, CreateTodoRequest request) {
         User user = getUserByUsername(username);
 
+        Priority priority = request.getPriority() != null ? parsePriority(request.getPriority()) : Priority.MEDIUM;
+
         Todo todo = Todo.builder()
                 .user(user)
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .completed(false)
-                .priority(request.getPriority() != null ?
-                        Priority.valueOf(request.getPriority().toUpperCase()) : Priority.MEDIUM)
+                .priority(priority)
                 .dueDate(request.getDueDate())
                 .build();
 
@@ -88,7 +91,7 @@ public class TodoService {
             todo.setCompleted(request.getCompleted());
         }
         if (request.getPriority() != null) {
-            todo.setPriority(Priority.valueOf(request.getPriority().toUpperCase()));
+            todo.setPriority(parsePriority(request.getPriority()));
         }
         if (request.getDueDate() != null) {
             todo.setDueDate(request.getDueDate());
@@ -120,5 +123,19 @@ public class TodoService {
     private User getUserByUsername(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+    }
+
+    private Priority parsePriority(String priority) {
+        if (priority == null) {
+            return null;
+        }
+        try {
+            return Priority.valueOf(priority.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            String validValues = Arrays.stream(Priority.values())
+                    .map(Enum::name)
+                    .collect(Collectors.joining(", "));
+            throw new BadRequestException("Invalid priority: '" + priority + "'. Valid values are: " + validValues);
+        }
     }
 }
