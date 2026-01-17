@@ -11,7 +11,9 @@
       "Bash(npm run build:*)",
       "Bash(./mvnw test:*)",
       "Bash(mvn clean test:*)",
-      "Bash(mvn help:effective-pom:*)"
+      "Bash(mvn help:effective-pom:*)",
+      "WebFetch(domain:acme-world.atlassian.net)",
+      "Bash(find:*)"
     ]
   }
 }
