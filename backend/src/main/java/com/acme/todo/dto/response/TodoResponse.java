@@ -23,6 +23,7 @@ public class TodoResponse {
     private LocalDate dueDate;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private LocalDateTime deletedAt;
 
     public static TodoResponse fromEntity(Todo todo) {
         return TodoResponse.builder()
@@ -34,6 +35,7 @@ public class TodoResponse {
                 .dueDate(todo.getDueDate())
                 .createdAt(todo.getCreatedAt())
                 .updatedAt(todo.getUpdatedAt())
+                .deletedAt(todo.getDeletedAt())
                 .build();
     }
 }

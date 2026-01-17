@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "todos")
@@ -35,6 +36,9 @@ public class Todo extends BaseEntity {
 
     @Column(name = "due_date")
     private LocalDate dueDate;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     public enum Priority {
         LOW, MEDIUM, HIGH
