@@ -604,4 +604,100 @@ class TodoControllerIntegrationTest extends AbstractIntegrationTest {
                         .header("Authorization", "Bearer " + authToken))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    @DisplayName("Should get todo history via API endpoint")
+    void shouldGetTodoHistoryViaApi() throws Exception {
+        // Create a todo
+        CreateTodoRequest createRequest = CreateTodoRequest.builder()
+                .title("Todo for History API")
+                .description("Testing history endpoint")
+                .priority("MEDIUM")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        TodoResponse created = objectMapper.readValue(
+                createResult.getResponse().getContentAsString(),
+                TodoResponse.class
+        );
+
+        // Update the todo to add more history
+        UpdateTodoRequest updateRequest = UpdateTodoRequest.builder()
+                .title("Updated Todo for History")
+                .build();
+
+        mockMvc.perform(put(getBaseUrl() + "/todos/" + created.getId())
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(updateRequest)))
+                .andExpect(status().isOk());
+
+        // Get history via API endpoint
+        mockMvc.perform(get(getBaseUrl() + "/todos/" + created.getId() + "/history")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].actionType").value("UPDATED"))
+                .andExpect(jsonPath("$[0].createdBy").value(TEST_USERNAME))
+                .andExpect(jsonPath("$[0].snapshot").isNotEmpty())
+                .andExpect(jsonPath("$[1].actionType").value("CREATED"))
+                .andExpect(jsonPath("$[1].createdBy").value(TEST_USERNAME));
+    }
+
+    @Test
+    @DisplayName("Should return 404 when getting history for non-existent todo")
+    void shouldReturn404WhenGettingHistoryForNonExistentTodo() throws Exception {
+        mockMvc.perform(get(getBaseUrl() + "/todos/99999/history")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("Should return 401 when getting history without authentication")
+    void shouldReturn401WhenGettingHistoryWithoutAuth() throws Exception {
+        mockMvc.perform(get(getBaseUrl() + "/todos/1/history"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Should return history for soft-deleted todo")
+    void shouldReturnHistoryForSoftDeletedTodo() throws Exception {
+        // Create a todo
+        CreateTodoRequest createRequest = CreateTodoRequest.builder()
+                .title("Todo to be soft-deleted")
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(createRequest)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        TodoResponse created = objectMapper.readValue(
+                createResult.getResponse().getContentAsString(),
+                TodoResponse.class
+        );
+
+        // Delete the todo (soft delete)
+        mockMvc.perform(delete(getBaseUrl() + "/todos/" + created.getId())
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isNoContent());
+
+        // Should still be able to access history
+        mockMvc.perform(get(getBaseUrl() + "/todos/" + created.getId() + "/history")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].actionType").value("DELETED"))
+                .andExpect(jsonPath("$[1].actionType").value("CREATED"));
+    }
 }

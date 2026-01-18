@@ -49,7 +49,7 @@ databaseChangeLog:
             constraintName: fk_audit_todo
             referencedTableName: todos
             referencedColumnNames: id
-            onDelete: RESTRICT
+            onDelete: CASCADE
         - addForeignKeyConstraint:
             baseTableName: todo_audit_log
             baseColumnNames: user_id

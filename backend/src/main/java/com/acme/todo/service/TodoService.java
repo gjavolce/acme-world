@@ -76,8 +76,8 @@ public class TodoService {
         Todo todo = todoRepository.findByIdAndUserId(todoId, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Todo not found with id: " + todoId));
         
-        // Get audit logs for this todo
-        List<TodoAuditLog> auditLogs = todoAuditLogRepository.findByTodoIdAndUserIdOrderByCreatedAtDesc(todoId, user.getId());
+        // Get audit logs for this todo (ownership already verified above)
+        List<TodoAuditLog> auditLogs = todoAuditLogRepository.findByTodoIdOrderByCreatedAtDesc(todoId);
         
         return auditLogs.stream()
                 .map(TodoAuditLogResponse::fromEntity)
@@ -219,8 +219,8 @@ public class TodoService {
             todoAuditLogRepository.save(auditLog);
             log.debug("Created audit log entry: action={}, todoId={}, user={}", actionType, todo.getId(), username);
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize todo snapshot for audit log: todoId={}", todo.getId(), e);
-            throw new RuntimeException("Failed to create audit log entry", e);
+            // Audit logging is best-effort: log the error but allow the main operation to succeed
+            log.error("Failed to serialize todo snapshot for audit log; continuing without audit entry: todoId={}", todo.getId(), e);
         }
     }
 }

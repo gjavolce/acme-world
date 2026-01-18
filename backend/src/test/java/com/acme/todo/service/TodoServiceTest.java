@@ -82,6 +82,113 @@ class TodoServiceTest {
     }
 
     @Nested
+    @DisplayName("getTodoHistory")
+    class GetTodoHistoryTests {
+
+        @Test
+        @DisplayName("should return history for a todo")
+        void shouldReturnHistoryForTodo() {
+            TodoAuditLog auditLog1 = TodoAuditLog.builder()
+                    .id(1L)
+                    .todo(testTodo)
+                    .user(testUser)
+                    .actionType(TodoAuditActionType.CREATED)
+                    .snapshot("{\"id\":1,\"title\":\"Test Todo\"}")
+                    .createdBy("testuser")
+                    .build();
+            auditLog1.setCreatedAt(LocalDateTime.now().minusHours(2));
+
+            TodoAuditLog auditLog2 = TodoAuditLog.builder()
+                    .id(2L)
+                    .todo(testTodo)
+                    .user(testUser)
+                    .actionType(TodoAuditActionType.UPDATED)
+                    .snapshot("{\"id\":1,\"title\":\"Updated Todo\"}")
+                    .createdBy("testuser")
+                    .build();
+            auditLog2.setCreatedAt(LocalDateTime.now().minusHours(1));
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(testTodo));
+            when(todoAuditLogRepository.findByTodoIdOrderByCreatedAtDesc(1L))
+                    .thenReturn(List.of(auditLog2, auditLog1));
+
+            var result = todoService.getTodoHistory("testuser", 1L);
+
+            assertThat(result).hasSize(2);
+            assertThat(result.get(0).getActionType()).isEqualTo("UPDATED");
+            assertThat(result.get(1).getActionType()).isEqualTo("CREATED");
+        }
+
+        @Test
+        @DisplayName("should throw ResourceNotFoundException for non-existent todo")
+        void shouldThrowForNonExistentTodo() {
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findByIdAndUserId(999L, 1L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> todoService.getTodoHistory("testuser", 999L))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Todo not found");
+        }
+
+        @Test
+        @DisplayName("should throw ResourceNotFoundException when user does not own the todo")
+        void shouldThrowWhenUserDoesNotOwnTodo() {
+            User otherUser = User.builder()
+                    .username("otheruser")
+                    .email("other@example.com")
+                    .passwordHash("hashedpassword")
+                    .enabled(true)
+                    .build();
+            otherUser.setId(2L);
+
+            when(userRepository.findByUsername("otheruser")).thenReturn(Optional.of(otherUser));
+            when(todoRepository.findByIdAndUserId(1L, 2L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> todoService.getTodoHistory("otheruser", 1L))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("Todo not found");
+        }
+
+        @Test
+        @DisplayName("should return empty list for todo with no history")
+        void shouldReturnEmptyListForTodoWithNoHistory() {
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(testTodo));
+            when(todoAuditLogRepository.findByTodoIdOrderByCreatedAtDesc(1L)).thenReturn(List.of());
+
+            var result = todoService.getTodoHistory("testuser", 1L);
+
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should allow access to history for soft-deleted todos")
+        void shouldAllowAccessToHistoryForSoftDeletedTodos() {
+            testTodo.setDeletedAt(LocalDateTime.now());
+            
+            TodoAuditLog auditLog = TodoAuditLog.builder()
+                    .id(1L)
+                    .todo(testTodo)
+                    .user(testUser)
+                    .actionType(TodoAuditActionType.DELETED)
+                    .snapshot("{\"id\":1,\"title\":\"Test Todo\"}")
+                    .createdBy("testuser")
+                    .build();
+            auditLog.setCreatedAt(LocalDateTime.now());
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(testTodo));
+            when(todoAuditLogRepository.findByTodoIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(auditLog));
+
+            var result = todoService.getTodoHistory("testuser", 1L);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getActionType()).isEqualTo("DELETED");
+        }
+    }
+
+    @Nested
     @DisplayName("getAllTodos")
     class GetAllTodosTests {
 
