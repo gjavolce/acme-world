@@ -279,31 +279,20 @@ class TodoRepositoryTest {
         
         // Create todos with different priorities and due dates
         // Expected order: HIGH priority first (oldest due date first), then MEDIUM, then LOW
-        Todo lowOldest = createTodoWithDueDate("Low Oldest", Priority.LOW, false, today.minusDays(10));
-        Todo mediumRecent = createTodoWithDueDate("Medium Recent", Priority.MEDIUM, false, today.minusDays(2));
-        Todo highOldest = createTodoWithDueDate("High Oldest", Priority.HIGH, false, today.minusDays(5));
-        Todo highRecent = createTodoWithDueDate("High Recent", Priority.HIGH, false, today.minusDays(1));
-        Todo mediumOldest = createTodoWithDueDate("Medium Oldest", Priority.MEDIUM, false, today.minusDays(7));
-        Todo lowRecent = createTodoWithDueDate("Low Recent", Priority.LOW, false, today.minusDays(3));
+        createTodoWithDueDate("Low Oldest", Priority.LOW, false, today.minusDays(10));
+        createTodoWithDueDate("Medium Recent", Priority.MEDIUM, false, today.minusDays(2));
+        createTodoWithDueDate("High Oldest", Priority.HIGH, false, today.minusDays(5));
+        createTodoWithDueDate("High Recent", Priority.HIGH, false, today.minusDays(1));
+        createTodoWithDueDate("Medium Oldest", Priority.MEDIUM, false, today.minusDays(7));
+        createTodoWithDueDate("Low Recent", Priority.LOW, false, today.minusDays(3));
 
         List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
 
         assertThat(urgentTodos).hasSize(6);
-        // HIGH priority first, ordered by due date (oldest first)
-        assertThat(urgentTodos.get(0).getTitle()).isEqualTo("High Oldest");
-        assertThat(urgentTodos.get(0).getPriority()).isEqualTo(Priority.HIGH);
-        assertThat(urgentTodos.get(1).getTitle()).isEqualTo("High Recent");
-        assertThat(urgentTodos.get(1).getPriority()).isEqualTo(Priority.HIGH);
-        // MEDIUM priority next, ordered by due date (oldest first)
-        assertThat(urgentTodos.get(2).getTitle()).isEqualTo("Medium Oldest");
-        assertThat(urgentTodos.get(2).getPriority()).isEqualTo(Priority.MEDIUM);
-        assertThat(urgentTodos.get(3).getTitle()).isEqualTo("Medium Recent");
-        assertThat(urgentTodos.get(3).getPriority()).isEqualTo(Priority.MEDIUM);
-        // LOW priority last, ordered by due date (oldest first)
-        assertThat(urgentTodos.get(4).getTitle()).isEqualTo("Low Oldest");
-        assertThat(urgentTodos.get(4).getPriority()).isEqualTo(Priority.LOW);
-        assertThat(urgentTodos.get(5).getTitle()).isEqualTo("Low Recent");
-        assertThat(urgentTodos.get(5).getPriority()).isEqualTo(Priority.LOW);
+        // Verify sorting: HIGH priority first (oldest first), then MEDIUM, then LOW
+        assertThat(urgentTodos)
+                .extracting(Todo::getTitle)
+                .containsExactly("High Oldest", "High Recent", "Medium Oldest", "Medium Recent", "Low Oldest", "Low Recent");
     }
 
     @Test
