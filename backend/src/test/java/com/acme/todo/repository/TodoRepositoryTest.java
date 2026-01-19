@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -217,12 +218,145 @@ class TodoRepositoryTest {
         assertThat(updated.getCompleted()).isTrue();
     }
 
+    @Test
+    @DisplayName("should find urgent todos by due date")
+    void shouldFindUrgentTodosByDueDate() {
+        LocalDate today = LocalDate.now();
+        
+        // Create todos with different due dates
+        Todo overdue = createTodoWithDueDate("Overdue", Priority.MEDIUM, false, today.minusDays(5));
+        Todo dueToday = createTodoWithDueDate("Due Today", Priority.MEDIUM, false, today);
+        Todo dueTomorrow = createTodoWithDueDate("Due Tomorrow", Priority.MEDIUM, false, today.plusDays(1));
+        Todo dueNextWeek = createTodoWithDueDate("Due Next Week", Priority.MEDIUM, false, today.plusDays(7));
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
+
+        assertThat(urgentTodos).hasSize(2);
+        assertThat(urgentTodos).extracting(Todo::getTitle)
+                .containsExactlyInAnyOrder("Overdue", "Due Today");
+    }
+
+    @Test
+    @DisplayName("should exclude completed todos from urgent list")
+    void shouldExcludeCompletedTodosFromUrgentList() {
+        LocalDate today = LocalDate.now();
+        
+        // Create incomplete and completed overdue todos
+        createTodoWithDueDate("Incomplete Overdue", Priority.HIGH, false, today.minusDays(1));
+        createTodoWithDueDate("Completed Overdue", Priority.HIGH, true, today.minusDays(2));
+        createTodoWithDueDate("Completed Due Today", Priority.MEDIUM, true, today);
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
+
+        assertThat(urgentTodos).hasSize(1);
+        assertThat(urgentTodos.get(0).getTitle()).isEqualTo("Incomplete Overdue");
+        assertThat(urgentTodos.get(0).getCompleted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("should exclude soft-deleted todos from urgent list")
+    void shouldExcludeSoftDeletedTodosFromUrgentList() {
+        LocalDate today = LocalDate.now();
+        
+        // Create active and soft-deleted overdue todos
+        createTodoWithDueDate("Active Overdue", Priority.HIGH, false, today.minusDays(1));
+        
+        Todo softDeleted = createTodoWithDueDate("Soft Deleted Overdue", Priority.HIGH, false, today.minusDays(2));
+        softDeleted.setDeletedAt(LocalDateTime.now());
+        todoRepository.save(softDeleted);
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
+
+        assertThat(urgentTodos).hasSize(1);
+        assertThat(urgentTodos.get(0).getTitle()).isEqualTo("Active Overdue");
+        assertThat(urgentTodos.get(0).getDeletedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("should sort urgent todos by priority desc then due date asc")
+    void shouldSortUrgentTodosByPriorityAndDueDate() {
+        LocalDate today = LocalDate.now();
+        
+        // Create todos with different priorities and due dates
+        // Expected order: HIGH priority first (oldest due date first), then MEDIUM, then LOW
+        createTodoWithDueDate("Low Oldest", Priority.LOW, false, today.minusDays(10));
+        createTodoWithDueDate("Medium Recent", Priority.MEDIUM, false, today.minusDays(2));
+        createTodoWithDueDate("High Oldest", Priority.HIGH, false, today.minusDays(5));
+        createTodoWithDueDate("High Recent", Priority.HIGH, false, today.minusDays(1));
+        createTodoWithDueDate("Medium Oldest", Priority.MEDIUM, false, today.minusDays(7));
+        createTodoWithDueDate("Low Recent", Priority.LOW, false, today.minusDays(3));
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
+
+        assertThat(urgentTodos).hasSize(6);
+        // Verify sorting: HIGH priority first (oldest first), then MEDIUM, then LOW
+        assertThat(urgentTodos)
+                .extracting(Todo::getTitle)
+                .containsExactly("High Oldest", "High Recent", "Medium Oldest", "Medium Recent", "Low Oldest", "Low Recent");
+    }
+
+    @Test
+    @DisplayName("should return empty list when no urgent todos exist")
+    void shouldReturnEmptyListWhenNoUrgentTodosExist() {
+        LocalDate today = LocalDate.now();
+        
+        // Create only future todos
+        createTodoWithDueDate("Future 1", Priority.HIGH, false, today.plusDays(1));
+        createTodoWithDueDate("Future 2", Priority.MEDIUM, false, today.plusDays(7));
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(testUser.getId(), today);
+
+        assertThat(urgentTodos).isEmpty();
+    }
+
+    @Test
+    @DisplayName("should find urgent todos only for specific user")
+    void shouldFindUrgentTodosOnlyForSpecificUser() {
+        LocalDate today = LocalDate.now();
+        
+        // Create another user
+        User otherUser = User.builder()
+                .username("otheruser")
+                .email("other@example.com")
+                .passwordHash("password")
+                .enabled(true)
+                .build();
+        otherUser = userRepository.save(otherUser);
+
+        // Create overdue todos for both users
+        createTodoWithDueDate("Test User Overdue", Priority.HIGH, false, today.minusDays(1));
+        createTodoWithDueDate(otherUser, "Other User Overdue", Priority.HIGH, false, today.minusDays(1));
+
+        List<Todo> testUserUrgent = todoRepository.findUrgentByUserId(testUser.getId(), today);
+        List<Todo> otherUserUrgent = todoRepository.findUrgentByUserId(otherUser.getId(), today);
+
+        assertThat(testUserUrgent).hasSize(1);
+        assertThat(testUserUrgent.get(0).getTitle()).isEqualTo("Test User Overdue");
+        assertThat(otherUserUrgent).hasSize(1);
+        assertThat(otherUserUrgent.get(0).getTitle()).isEqualTo("Other User Overdue");
+    }
+
     private Todo createTodo(String title, Priority priority, boolean completed) {
         Todo todo = Todo.builder()
                 .user(testUser)
                 .title(title)
                 .priority(priority)
                 .completed(completed)
+                .build();
+        return todoRepository.save(todo);
+    }
+
+    private Todo createTodoWithDueDate(String title, Priority priority, boolean completed, LocalDate dueDate) {
+        return createTodoWithDueDate(testUser, title, priority, completed, dueDate);
+    }
+
+    private Todo createTodoWithDueDate(User user, String title, Priority priority, boolean completed, LocalDate dueDate) {
+        Todo todo = Todo.builder()
+                .user(user)
+                .title(title)
+                .priority(priority)
+                .completed(completed)
+                .dueDate(dueDate)
                 .build();
         return todoRepository.save(todo);
     }
