@@ -110,12 +110,18 @@ public class TodoService {
 
         // Partition into overdue and due today
         List<TodoResponse> overdue = urgentTodos.stream()
-                .filter(todo -> todo.getDueDate().isBefore(today))
+                .filter(todo -> {
+                    LocalDate dueDate = todo.getDueDate();
+                    return dueDate != null && dueDate.isBefore(today);
+                })
                 .map(TodoResponse::fromEntity)
                 .collect(Collectors.toList());
 
         List<TodoResponse> dueToday = urgentTodos.stream()
-                .filter(todo -> todo.getDueDate().isEqual(today))
+                .filter(todo -> {
+                    LocalDate dueDate = todo.getDueDate();
+                    return dueDate != null && dueDate.isEqual(today);
+                })
                 .map(TodoResponse::fromEntity)
                 .collect(Collectors.toList());
 
