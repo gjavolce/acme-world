@@ -3,6 +3,7 @@ package com.acme.todo.service;
 import com.acme.todo.dto.request.CreateTodoRequest;
 import com.acme.todo.dto.request.UpdateTodoRequest;
 import com.acme.todo.dto.response.TodoResponse;
+import com.acme.todo.dto.response.UrgentTodosResponse;
 import com.acme.todo.entity.Todo;
 import com.acme.todo.entity.Todo.Priority;
 import com.acme.todo.entity.TodoAuditActionType;
@@ -292,6 +293,231 @@ class TodoServiceTest {
             assertThatThrownBy(() -> todoService.getTodoById("testuser", 999L))
                     .isInstanceOf(ResourceNotFoundException.class)
                     .hasMessageContaining("Todo not found");
+        }
+    }
+
+    @Nested
+    @DisplayName("getUrgentTodos")
+    class GetUrgentTodosTests {
+
+        @Test
+        @DisplayName("should return overdue and due today todos")
+        void shouldReturnOverdueAndDueTodayTodos() {
+            LocalDate today = LocalDate.now();
+            
+            Todo overdueTodo = Todo.builder()
+                    .user(testUser)
+                    .title("Overdue Todo")
+                    .description("This is overdue")
+                    .completed(false)
+                    .priority(Priority.HIGH)
+                    .dueDate(today.minusDays(2))
+                    .build();
+            overdueTodo.setId(2L);
+            overdueTodo.setCreatedAt(LocalDateTime.now());
+            overdueTodo.setUpdatedAt(LocalDateTime.now());
+
+            Todo dueTodayTodo = Todo.builder()
+                    .user(testUser)
+                    .title("Due Today Todo")
+                    .description("This is due today")
+                    .completed(false)
+                    .priority(Priority.MEDIUM)
+                    .dueDate(today)
+                    .build();
+            dueTodayTodo.setId(3L);
+            dueTodayTodo.setCreatedAt(LocalDateTime.now());
+            dueTodayTodo.setUpdatedAt(LocalDateTime.now());
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today))
+                    .thenReturn(List.of(overdueTodo, dueTodayTodo));
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).hasSize(1);
+            assertThat(result.getOverdue().get(0).getTitle()).isEqualTo("Overdue Todo");
+            assertThat(result.getDueToday()).hasSize(1);
+            assertThat(result.getDueToday().get(0).getTitle()).isEqualTo("Due Today Todo");
+            assertThat(result.getCounts().getOverdueCount()).isEqualTo(1);
+            assertThat(result.getCounts().getDueTodayCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should partition multiple overdue and due today todos correctly")
+        void shouldPartitionMultipleTodosCorrectly() {
+            LocalDate today = LocalDate.now();
+            
+            Todo overdue1 = Todo.builder()
+                    .user(testUser)
+                    .title("Overdue 1")
+                    .completed(false)
+                    .priority(Priority.HIGH)
+                    .dueDate(today.minusDays(5))
+                    .build();
+            overdue1.setId(2L);
+
+            Todo overdue2 = Todo.builder()
+                    .user(testUser)
+                    .title("Overdue 2")
+                    .completed(false)
+                    .priority(Priority.MEDIUM)
+                    .dueDate(today.minusDays(1))
+                    .build();
+            overdue2.setId(3L);
+
+            Todo dueToday1 = Todo.builder()
+                    .user(testUser)
+                    .title("Due Today 1")
+                    .completed(false)
+                    .priority(Priority.HIGH)
+                    .dueDate(today)
+                    .build();
+            dueToday1.setId(4L);
+
+            Todo dueToday2 = Todo.builder()
+                    .user(testUser)
+                    .title("Due Today 2")
+                    .completed(false)
+                    .priority(Priority.LOW)
+                    .dueDate(today)
+                    .build();
+            dueToday2.setId(5L);
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today))
+                    .thenReturn(List.of(overdue1, overdue2, dueToday1, dueToday2));
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).hasSize(2);
+            assertThat(result.getDueToday()).hasSize(2);
+            assertThat(result.getCounts().getOverdueCount()).isEqualTo(2);
+            assertThat(result.getCounts().getDueTodayCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("should handle empty result when no urgent todos exist")
+        void shouldHandleEmptyResult() {
+            LocalDate today = LocalDate.now();
+            
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today)).thenReturn(List.of());
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).isEmpty();
+            assertThat(result.getDueToday()).isEmpty();
+            assertThat(result.getCounts().getOverdueCount()).isEqualTo(0);
+            assertThat(result.getCounts().getDueTodayCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should handle only overdue todos")
+        void shouldHandleOnlyOverdueTodos() {
+            LocalDate today = LocalDate.now();
+            
+            Todo overdueTodo = Todo.builder()
+                    .user(testUser)
+                    .title("Overdue Todo")
+                    .completed(false)
+                    .priority(Priority.HIGH)
+                    .dueDate(today.minusDays(3))
+                    .build();
+            overdueTodo.setId(2L);
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today)).thenReturn(List.of(overdueTodo));
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).hasSize(1);
+            assertThat(result.getDueToday()).isEmpty();
+            assertThat(result.getCounts().getOverdueCount()).isEqualTo(1);
+            assertThat(result.getCounts().getDueTodayCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("should handle only due today todos")
+        void shouldHandleOnlyDueTodayTodos() {
+            LocalDate today = LocalDate.now();
+            
+            Todo dueTodayTodo = Todo.builder()
+                    .user(testUser)
+                    .title("Due Today Todo")
+                    .completed(false)
+                    .priority(Priority.MEDIUM)
+                    .dueDate(today)
+                    .build();
+            dueTodayTodo.setId(2L);
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today)).thenReturn(List.of(dueTodayTodo));
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).isEmpty();
+            assertThat(result.getDueToday()).hasSize(1);
+            assertThat(result.getCounts().getOverdueCount()).isEqualTo(0);
+            assertThat(result.getCounts().getDueTodayCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("should filter out todos with null due dates")
+        void shouldFilterOutNullDueDates() {
+            LocalDate today = LocalDate.now();
+            
+            Todo todoWithNullDate = Todo.builder()
+                    .user(testUser)
+                    .title("No Due Date")
+                    .completed(false)
+                    .priority(Priority.HIGH)
+                    .dueDate(null)
+                    .build();
+            todoWithNullDate.setId(2L);
+
+            Todo overdueTodo = Todo.builder()
+                    .user(testUser)
+                    .title("Overdue Todo")
+                    .completed(false)
+                    .priority(Priority.MEDIUM)
+                    .dueDate(today.minusDays(1))
+                    .build();
+            overdueTodo.setId(3L);
+
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today))
+                    .thenReturn(List.of(todoWithNullDate, overdueTodo));
+
+            var result = todoService.getUrgentTodos("testuser");
+
+            assertThat(result.getOverdue()).hasSize(1);
+            assertThat(result.getOverdue().get(0).getTitle()).isEqualTo("Overdue Todo");
+            assertThat(result.getDueToday()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("should throw ResourceNotFoundException for non-existent user")
+        void shouldThrowForNonExistentUser() {
+            when(userRepository.findByUsername("unknown")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> todoService.getUrgentTodos("unknown"))
+                    .isInstanceOf(ResourceNotFoundException.class)
+                    .hasMessageContaining("User not found");
+        }
+
+        @Test
+        @DisplayName("should verify repository is called with correct parameters")
+        void shouldVerifyRepositoryInteraction() {
+            LocalDate today = LocalDate.now();
+            
+            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(todoRepository.findUrgentByUserId(1L, today)).thenReturn(List.of());
+
+            todoService.getUrgentTodos("testuser");
+
+            verify(userRepository).findByUsername("testuser");
+            verify(todoRepository).findUrgentByUserId(1L, today);
         }
     }
 
