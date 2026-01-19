@@ -25,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -108,22 +109,21 @@ public class TodoService {
 
         List<Todo> urgentTodos = todoRepository.findUrgentByUserId(user.getId(), today);
 
-        // Partition into overdue and due today
-        List<TodoResponse> overdue = urgentTodos.stream()
-                .filter(todo -> {
-                    LocalDate dueDate = todo.getDueDate();
-                    return dueDate != null && dueDate.isBefore(today);
-                })
-                .map(TodoResponse::fromEntity)
-                .collect(Collectors.toList());
+        // Partition into overdue and due today in a single pass
+        List<TodoResponse> overdue = new ArrayList<>();
+        List<TodoResponse> dueToday = new ArrayList<>();
 
-        List<TodoResponse> dueToday = urgentTodos.stream()
-                .filter(todo -> {
-                    LocalDate dueDate = todo.getDueDate();
-                    return dueDate != null && dueDate.isEqual(today);
-                })
-                .map(TodoResponse::fromEntity)
-                .collect(Collectors.toList());
+        for (Todo todo : urgentTodos) {
+            LocalDate dueDate = todo.getDueDate();
+            if (dueDate != null) {
+                TodoResponse response = TodoResponse.fromEntity(todo);
+                if (dueDate.isBefore(today)) {
+                    overdue.add(response);
+                } else if (dueDate.isEqual(today)) {
+                    dueToday.add(response);
+                }
+            }
+        }
 
         return UrgentTodosResponse.of(overdue, dueToday);
     }
