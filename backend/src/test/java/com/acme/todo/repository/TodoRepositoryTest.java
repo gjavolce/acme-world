@@ -336,15 +336,7 @@ class TodoRepositoryTest {
 
         // Create overdue todos for both users
         createTodoWithDueDate("Test User Overdue", Priority.HIGH, false, today.minusDays(1));
-        
-        Todo otherUserTodo = Todo.builder()
-                .user(otherUser)
-                .title("Other User Overdue")
-                .priority(Priority.HIGH)
-                .completed(false)
-                .dueDate(today.minusDays(1))
-                .build();
-        todoRepository.save(otherUserTodo);
+        createTodoWithDueDate(otherUser, "Other User Overdue", Priority.HIGH, false, today.minusDays(1));
 
         List<Todo> testUserUrgent = todoRepository.findUrgentByUserId(testUser.getId(), today);
         List<Todo> otherUserUrgent = todoRepository.findUrgentByUserId(otherUser.getId(), today);
@@ -366,8 +358,12 @@ class TodoRepositoryTest {
     }
 
     private Todo createTodoWithDueDate(String title, Priority priority, boolean completed, LocalDate dueDate) {
+        return createTodoWithDueDate(testUser, title, priority, completed, dueDate);
+    }
+
+    private Todo createTodoWithDueDate(User user, String title, Priority priority, boolean completed, LocalDate dueDate) {
         Todo todo = Todo.builder()
-                .user(testUser)
+                .user(user)
                 .title(title)
                 .priority(priority)
                 .completed(completed)
