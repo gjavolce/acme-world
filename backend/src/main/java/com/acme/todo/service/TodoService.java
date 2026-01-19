@@ -5,6 +5,7 @@ import com.acme.todo.dto.request.UpdateTodoRequest;
 import com.acme.todo.dto.response.TodoAuditLogResponse;
 import com.acme.todo.dto.response.TodoResponse;
 import com.acme.todo.dto.response.TodoSnapshotDto;
+import com.acme.todo.dto.response.UrgentTodosResponse;
 import com.acme.todo.entity.Todo;
 import com.acme.todo.entity.Todo.Priority;
 import com.acme.todo.entity.TodoAuditActionType;
@@ -22,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -90,6 +92,34 @@ public class TodoService {
         Todo todo = todoRepository.findByIdAndUserIdAndDeletedAtIsNull(id, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Todo not found with id: " + id));
         return TodoResponse.fromEntity(todo);
+    }
+
+    /**
+     * Retrieves urgent todos (overdue and due today) for the current user.
+     * Todos are sorted by priority (HIGH first) then by due date (oldest first).
+     *
+     * @param username the username of the requesting user
+     * @return UrgentTodosResponse containing overdue todos, due today todos, and counts
+     */
+    @Transactional(readOnly = true)
+    public UrgentTodosResponse getUrgentTodos(String username) {
+        User user = getUserByUsername(username);
+        LocalDate today = LocalDate.now();
+
+        List<Todo> urgentTodos = todoRepository.findUrgentByUserId(user.getId(), today);
+
+        // Partition into overdue and due today
+        List<TodoResponse> overdue = urgentTodos.stream()
+                .filter(todo -> todo.getDueDate().isBefore(today))
+                .map(TodoResponse::fromEntity)
+                .collect(Collectors.toList());
+
+        List<TodoResponse> dueToday = urgentTodos.stream()
+                .filter(todo -> todo.getDueDate().isEqual(today))
+                .map(TodoResponse::fromEntity)
+                .collect(Collectors.toList());
+
+        return UrgentTodosResponse.of(overdue, dueToday);
     }
 
     @Transactional

@@ -4,6 +4,7 @@ import com.acme.todo.dto.request.CreateTodoRequest;
 import com.acme.todo.dto.request.UpdateTodoRequest;
 import com.acme.todo.dto.response.TodoAuditLogResponse;
 import com.acme.todo.dto.response.TodoResponse;
+import com.acme.todo.dto.response.UrgentTodosResponse;
 import com.acme.todo.service.TodoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -35,6 +36,15 @@ public class TodoController {
             @RequestParam(required = false) String priority) {
         return ResponseEntity.ok(
                 todoService.getAllTodos(userDetails.getUsername(), completed, priority));
+    }
+
+    @GetMapping("/urgent")
+    @Operation(summary = "Get urgent todos (overdue and due today)",
+               description = "Returns todos that are overdue or due today, sorted by priority (HIGH first) then by due date (oldest first). " +
+                            "Completed and deleted todos are excluded.")
+    public ResponseEntity<UrgentTodosResponse> getUrgentTodos(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(todoService.getUrgentTodos(userDetails.getUsername()));
     }
 
     @GetMapping("/{id}")

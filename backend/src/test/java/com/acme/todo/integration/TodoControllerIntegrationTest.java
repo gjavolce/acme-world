@@ -700,4 +700,171 @@ class TodoControllerIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$[0].actionType").value("DELETED"))
                 .andExpect(jsonPath("$[1].actionType").value("CREATED"));
     }
+
+    // ==================== Urgent Todos Tests ====================
+
+    @Test
+    @DisplayName("Should return 401 for unauthenticated urgent request")
+    void shouldReturn401ForUnauthenticatedUrgentRequest() throws Exception {
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("Should return 200 with correct structure for authenticated user")
+    void shouldReturn200WithCorrectStructureForUrgentTodos() throws Exception {
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue").isArray())
+                .andExpect(jsonPath("$.dueToday").isArray())
+                .andExpect(jsonPath("$.counts").exists())
+                .andExpect(jsonPath("$.counts.overdue").isNumber())
+                .andExpect(jsonPath("$.counts.dueToday").isNumber())
+                .andExpect(jsonPath("$.counts.total").isNumber());
+    }
+
+    @Test
+    @DisplayName("Should return empty response when no urgent todos")
+    void shouldReturnEmptyResponseWhenNoUrgentTodos() throws Exception {
+        // Create a todo with future due date (not urgent)
+        CreateTodoRequest request = CreateTodoRequest.builder()
+                .title("Non-urgent future todo test")
+                .dueDate(LocalDate.now().plusDays(7))
+                .build();
+
+        mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(request)))
+                .andExpect(status().isCreated());
+
+        // Verify the future todo does NOT appear in urgent response
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue[?(@.title == 'Non-urgent future todo test')]").doesNotExist())
+                .andExpect(jsonPath("$.dueToday[?(@.title == 'Non-urgent future todo test')]").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Should return overdue todos correctly")
+    void shouldReturnOverdueTodosCorrectly() throws Exception {
+        // Create an overdue todo
+        CreateTodoRequest request = CreateTodoRequest.builder()
+                .title("Overdue todo")
+                .priority("HIGH")
+                .dueDate(LocalDate.now().minusDays(3))
+                .build();
+
+        mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(request)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$.overdue[?(@.title == 'Overdue todo')]").exists())
+                .andExpect(jsonPath("$.counts.overdue").value(greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    @DisplayName("Should return due today todos correctly")
+    void shouldReturnDueTodayTodosCorrectly() throws Exception {
+        // Create a todo due today
+        CreateTodoRequest request = CreateTodoRequest.builder()
+                .title("Due today todo")
+                .priority("MEDIUM")
+                .dueDate(LocalDate.now())
+                .build();
+
+        mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(request)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dueToday", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$.dueToday[?(@.title == 'Due today todo')]").exists())
+                .andExpect(jsonPath("$.counts.dueToday").value(greaterThanOrEqualTo(1)));
+    }
+
+    @Test
+    @DisplayName("Should not include completed todos in urgent response")
+    void shouldNotIncludeCompletedTodosInUrgent() throws Exception {
+        // Create an overdue todo
+        CreateTodoRequest request = CreateTodoRequest.builder()
+                .title("Completed overdue todo")
+                .dueDate(LocalDate.now().minusDays(1))
+                .build();
+
+        MvcResult createResult = mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        TodoResponse created = objectMapper.readValue(
+                createResult.getResponse().getContentAsString(),
+                TodoResponse.class
+        );
+
+        // Mark it as completed
+        mockMvc.perform(patch(getBaseUrl() + "/todos/" + created.getId() + "/toggle")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completed").value(true));
+
+        // Verify it does not appear in urgent todos
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue[?(@.title == 'Completed overdue todo')]").doesNotExist())
+                .andExpect(jsonPath("$.dueToday[?(@.title == 'Completed overdue todo')]").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("Should categorize overdue and due today correctly")
+    void shouldCategorizeOverdueAndDueTodayCorrectly() throws Exception {
+        // Create one overdue todo
+        CreateTodoRequest overdueRequest = CreateTodoRequest.builder()
+                .title("Categorize overdue test")
+                .dueDate(LocalDate.now().minusDays(2))
+                .build();
+
+        mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(overdueRequest)))
+                .andExpect(status().isCreated());
+
+        // Create one due today todo
+        CreateTodoRequest dueTodayRequest = CreateTodoRequest.builder()
+                .title("Categorize due today test")
+                .dueDate(LocalDate.now())
+                .build();
+
+        mockMvc.perform(post(getBaseUrl() + "/todos")
+                        .header("Authorization", "Bearer " + authToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(asJson(dueTodayRequest)))
+                .andExpect(status().isCreated());
+
+        // Verify categorization
+        mockMvc.perform(get(getBaseUrl() + "/todos/urgent")
+                        .header("Authorization", "Bearer " + authToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.overdue[?(@.title == 'Categorize overdue test')]").exists())
+                .andExpect(jsonPath("$.dueToday[?(@.title == 'Categorize due today test')]").exists())
+                // Ensure they are not mixed up
+                .andExpect(jsonPath("$.overdue[?(@.title == 'Categorize due today test')]").doesNotExist())
+                .andExpect(jsonPath("$.dueToday[?(@.title == 'Categorize overdue test')]").doesNotExist());
+    }
 }
