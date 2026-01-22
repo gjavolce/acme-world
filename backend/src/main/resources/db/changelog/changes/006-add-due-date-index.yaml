@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-due-date-index
+      author: bojan.dimovski
+      changes:
+        - createIndex:
+            tableName: todos
+            indexName: idx_todos_due_date_user_id
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: due_date
